@@ -1,0 +1,65 @@
+# This is the AAP enterprise installer inventory file
+# Please consult the docs if you're unsure what to add
+# For all optional variables please consult the included README.md
+# or the Red Hat documentation:
+# https://docs.redhat.com/en/documentation/red_hat_ansible_automation_platform/2.5/html/containerized_installation
+
+# This section is for your AAP Gateway host(s)
+# -----------------------------------------------------
+[automationgateway]
+aap-host.internal.cloudapp.net
+
+# This section is for your AAP Controller host(s)
+# -----------------------------------------------------
+[automationcontroller]
+aap-host.internal.cloudapp.net
+
+# This section is for your AAP Automation Hub host(s)
+# -----------------------------------------------------
+[automationhub]
+aap-host.internal.cloudapp.net
+
+[database]
+aap-host.internal.cloudapp.net
+
+[all:vars]
+
+ansible_connection=local
+# Common variables
+# https://docs.redhat.com/en/documentation/red_hat_ansible_automation_platform/2.5/html/containerized_installation/appendix-inventory-files-vars#ref-general-inventory-variables
+# -----------------------------------------------------
+#registry_url='registry.redhat.io'
+registry_username='{{ rhn_username }}'
+registry_password='{{ rhn_password }}'
+
+postgresql_admin_username=postgres
+postgresql_admin_password='{{ pgsql_password }}'
+redis_mode=standalone
+
+# AAP Gateway
+# https://docs.redhat.com/en/documentation/red_hat_ansible_automation_platform/2.5/html/containerized_installation/appendix-inventory-files-vars#ref-gateway-variables
+# -----------------------------------------------------
+gateway_admin_password='{{ admin_password }}'
+gateway_pg_host=aap-host
+gateway_pg_password='{{ pgsql_password }}'
+
+# AAP Controller
+# https://docs.redhat.com/en/documentation/red_hat_ansible_automation_platform/2.5/html/containerized_installation/appendix-inventory-files-vars#ref-controller-variables
+# -----------------------------------------------------
+controller_admin_password='{{ admin_password }}'
+controller_pg_host=aap-host
+controller_pg_password='{{ pgsql_password }}'
+
+# AAP Automation Hub
+# https://docs.redhat.com/en/documentation/red_hat_ansible_automation_platform/2.5/html/containerized_installation/appendix-inventory-files-vars#ref-hub-variables
+# -----------------------------------------------------
+hub_admin_password='{{ admin_password }}'
+hub_pg_host=aap-host
+hub_pg_password='{{ pgsql_password }}'
+
+# AAP EDA Controller
+# https://docs.redhat.com/en/documentation/red_hat_ansible_automation_platform/2.5/html/containerized_installation/appendix-inventory-files-vars#event-driven-ansible-controller
+# -----------------------------------------------------
+eda_admin_password='{{ admin_password }}'
+eda_pg_host=aap-host
+eda_pg_password='{{ pgsql_password }}'

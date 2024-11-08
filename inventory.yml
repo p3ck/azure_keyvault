@@ -1,0 +1,14 @@
+---
+plugin: azure.azcollection.azure_rm
+plain_host_names: yes
+include_vm_resource_groups: ['bpeck']
+
+hostvar_expressions:
+  ansible_user: "'aap-admin'"
+  ansible_ssh_common_args: "'-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no'"
+
+keyed_groups:
+# places each host in a group named 'tag_(tag name)_(tag value)' for each tag on a VM.
+  - prefix: tag
+    key: tags
+#    trailing_separator: false

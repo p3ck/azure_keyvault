@@ -1,0 +1,172 @@
+---
+- name: Provision VM's for AAP
+  hosts: localhost
+  connection: local
+  vars:
+    aap_hostname: "aap-host"
+    aap_admin: "aap-admin"
+    location: "eastus"
+    vault_name: "myaapvault"
+    pgsql_password: "CHANGEME"
+    admin_password: "CHANGEME"
+  tasks:
+    - name: Provision VM
+      ansible.builtin.include_role:
+        name: cloud.azure_ops.azure_virtual_machine_with_public_ip
+      vars:
+        azure_virtual_machine_with_public_ip_operation: "create"
+        azure_virtual_machine_with_public_ip_resource_group: "{{ resource_group }}"
+        azure_virtual_machine_with_public_ip_region: "{{ location }}"
+        azure_virtual_machine_with_public_ip_tags:
+          purpose: "aap"
+        azure_virtual_machine_with_public_ip_vm:
+          name: "{{ aap_hostname }}"
+          admin_username: "{{ aap_admin }}"
+          size: Standard_B16ms
+          os: Linux
+          ssh_public_keys:
+             - path: '/home/aap-admin/.ssh/authorized_keys'
+               key_data: "{{ lookup('file', '~/.ssh/id_rsa.pub') }}"
+          ssh_pw_enabled: False
+          image: 
+            offer: RHEL
+            publisher: RedHat
+            sku: 9-lvm
+            version: latest
+          vnet_address_prefixes_cidr:
+          - "10.1.0.0/16"
+          subnet_address_prefixes_cidr:
+          - "10.1.0.0/24"
+
+    - name: Update default public ip with dns
+      azure.azcollection.azure_rm_publicipaddress:
+        resource_group: "{{ resource_group }}"
+        name: "{{ aap_hostname }}"
+        domain_name: "{{ aap_hostname }}"
+        reverse_fqdn: "{{ aap_hostname }}.{{ location }}.cloudapp.azure.com"
+        allocation_method: static
+
+    - name: Lookup service principal object id
+      ansible.builtin.set_fact:
+        object_id: "{{ lookup('azure.azcollection.azure_service_principal_attribute',
+                              azure_client_id=azure_client_id,
+                              azure_secret=azure_secret,
+                              azure_tenant=azure_tenant) }}"
+
+    - name: Update VM to use SystemIdentity
+      azure.azcollection.azure_rm_virtualmachine:
+        resource_group: "{{ resource_group }}"
+        name: "{{ aap_hostname }}"
+        vm_identity:
+          type: "SystemAssigned"
+      register: vm_info
+
+    - name: Set SystemAssigned object_id
+      ansible.builtin.set_fact:
+        system_object_id: "{{ vm_info.ansible_facts.azure_vm.identity.principal_id }}"
+
+    - name: Create policies keys list
+      ansible.builtin.set_fact:
+        policies_keys_list:
+          - get
+          - list
+          - wrapkey
+          - unwrapkey
+          - create
+          - update
+          - import
+          - delete
+          - backup
+          - restore
+          - recover
+          - purge
+
+    - name: Create a key vault
+      azure.azcollection.azure_rm_keyvault:
+        resource_group: "{{ resource_group }}"
+        vault_name: "{{ vault_name }}"
+        enabled_for_disk_encryption: true
+        vault_tenant: "{{ tenant_id }}"
+        sku:
+          name: standard
+          family: A
+        access_policies:
+          - tenant_id: "{{ tenant_id }}"
+            object_id: "{{ system_object_id }}"
+            keys: "{{ policies_keys_list }}"
+            secrets:
+              - get
+              - list
+              - set
+              - delete
+              - recover
+              - backup
+              - restore
+          - tenant_id: "{{ tenant_id }}"
+            object_id: "{{ object_id }}"
+            keys: "{{ policies_keys_list }}"
+            secrets:
+              - get
+              - list
+              - set
+              - delete
+              - recover
+              - backup
+              - restore
+
+    - name: Get Key Vault by name
+      azure.azcollection.azure_rm_keyvault_info:
+        resource_group: "{{ resource_group }}"
+        name: "{{ vault_name }}"
+      register: keyvault
+
+    - name: set KeyVault uri fact
+      ansible.builtin.set_fact: keyvaulturi="{{ keyvault['keyvaults'][0]['vault_uri'] }}"
+
+    - name: Create a secret
+      azure.azcollection.azure_rm_keyvaultsecret:
+        secret_name: adminPassword
+        secret_value: This is SuperSecret and no one should steal it.
+        keyvault_uri: "{{ keyvaulturi }}"
+      
+    - name: Refresh Azure Inventory
+      meta: refresh_inventory
+
+- name: Register AAP host with RHN
+  hosts: aap-host
+  become: true
+  tasks:
+    - name: Ping
+      ansible.builtin.ping:
+    - name: Register as user and auto-subscribe to available content.
+      community.general.redhat_subscription:
+        state: present
+        username: "{{ rhn_username }}"
+        password: "{{ rhn_password }}"
+        auto_attach: true
+    - name: Install Ansible-core
+      ansible.builtin.package:
+        name: ansible-core
+        state: present
+    - name: Extend the logical volume homelv to 30g
+      community.general.lvol:
+        vg: rootvg
+        lv: homelv
+        resizefs: yes
+        size: 30g
+    - name: Copy ansible-automation-platform-containerized-setup-2.5-2.tar.gz
+      ansible.builtin.unarchive:
+        src: "files/ansible-automation-platform-containerized-setup-2.5-2.tar.gz"
+        dest: "/home/aap-admin/"
+    - name: Copy Inventory
+      ansible.builtin.template:
+        src: "templates/inventory"
+        dest: "/home/aap-admin/ansible-automation-platform-containerized-setup-2.5-2"
+    - name: Copy README
+      ansible.builtin.copy:
+        src: "files/README"
+        dest: "/home/aap-admin/ansible-automation-platform-containerized-setup-2.5-2"
+    - name: Copy azure-keyvault.yml
+      ansible.builtin.copy:
+        src: "files/azure-keyvault.yml"
+        dest: "/home/aap-admin"

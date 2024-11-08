@@ -1,0 +1,16 @@
+---
+- name: Work with keyvault
+  hosts: localhost
+  become: true
+  vars:
+    resource_group: "bpeck"
+    vault_name: "myaapvault"
+    secret_name: "adminPassword"
+    vault_url: "https://myaapvault.vault.azure.net/"
+  tasks:
+    - name: Set key vault secret fact
+      ansible.builtin.set_fact: secretValue={{ lookup('azure.azcollection.azure_keyvault_secret',secret_name,vault_url=vault_url) }}
+
+    - name: Output key vault secret
+      ansible.builtin.debug:
+        msg: "{{ secretValue }}"
